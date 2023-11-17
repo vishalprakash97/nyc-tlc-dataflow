@@ -6,12 +6,12 @@ This repo includes code for:
 
 ### Useful Commands
 - Creating Network
-```
+```shell
 docker network create <network-name>
 ```
 
 - Running Docker containers from CLI
-```
+```shell
 docker run -it \
   -e POSTGRES_USER=<user-id> \
   -e POSTGRES_PASSWORD=<password> \
@@ -32,17 +32,17 @@ docker run -it \
     dpage/pgadmin4
 ```
 - Running PGCLI
-```
+```shell
 pgcli -h <localhost/ip-addr> -p 5432 -u <user-id> -d <db-name>
 ```
 
 - Convert jupyter notebook to .py script
-```
+```shell
 jupyter nbconvert --to=script upload_data.ipynb
 ```
 
 - Run upload_data.py
-```
+```shell
 python3 upload_data.py \
   --host=<localhost/ip-addr> \
   --port=5432 \
@@ -53,18 +53,18 @@ python3 upload_data.py \
 *Note*: Create .env file containing username and password
 
 - Build Docker images from docker-compose.yaml
-```
+```shell
 docker-compose up -d
 ```
 - Build Dockerfile
-```
+```shell
 docker build -t taxi_ingest:v01 . 
 ```
 
 
 
-- Run Docker
-```
+- Run Docker image
+```shell
 docker run -it \
     --network=<network-name> \
     taxi_ingest:v01 \
