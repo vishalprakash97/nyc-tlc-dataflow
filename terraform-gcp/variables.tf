@@ -25,5 +25,5 @@ variable "storage_class" {
 variable "BQ_DATASET" {
   description = "Big Query Dataset that raw data will be written to"
   type = string
-  default = "yellow_taxi_trips_all"
+  default = "yellow_taxi_trips"
 }
