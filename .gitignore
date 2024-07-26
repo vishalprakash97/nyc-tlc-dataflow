@@ -9,6 +9,7 @@
 **/commands.txt
 requirements-copy.txt
 **/.prefectignore
+**/__pycache__
 
 #terrafrom
 **.terraform
@@ -20,6 +21,7 @@ requirements-copy.txt
 **/ny_taxi_postgres_data/
 **/pgadmin_data
 **/data
+
 
 
 
