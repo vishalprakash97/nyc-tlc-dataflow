@@ -9,6 +9,7 @@
 **/commands.txt
 requirements-copy.txt
 **/.prefectignore
+**/__pycache__
 
 #terrafrom
 **.terraform
