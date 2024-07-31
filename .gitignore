@@ -5,22 +5,14 @@
 **.env
 .ipynb_checkpoints
 .venv
-**/output.csv.gz
-**/commands.txt
-requirements-copy.txt
-**/.prefectignore
 **/__pycache__
 
-#terrafrom
-**.terraform
-**.tfstate*
-**.terraform.lock.*
-**/*.tfvars
+**/env.json
+.aws-sam/
+samconfig.toml
+**/.prefectignore
 
-
-**/ny_taxi_postgres_data/
-**/pgadmin_data
-**/data
+events/
 
 
 

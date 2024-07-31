@@ -1,0 +1,67 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: SAM Template to fetch data for TLC
+
+Parameters:
+  Color:
+    Type: String
+    Default: yellow
+  URL:
+    Type: String
+    Default: https://www.nyc.gov/site/tlc/about/tlc-trip-record-data.page
+
+Globals:
+  Function:
+    Runtime: python3.11
+    Architectures:
+      - x86_64
+    LoggingConfig:
+      LogFormat: JSON
+
+Resources:
+  S3Bucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: nyc-tlc-data-lake
+      VersioningConfiguration:
+        Status: Enabled
+
+  FetchDataFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: ../lambda/fetch_data
+      Handler: function.lambda_handler
+      Timeout: 30
+      MemorySize: 256
+      Environment:
+        Variables:
+          bucket_name: !Ref S3Bucket
+          color: !Ref Color
+          url: !Ref URL
+          ssm_month_var: !Ref LastProcessedMonth
+          ssm_year_var: !Ref LastProcessedYear
+
+      Policies:
+        - Statement:
+            - Effect: 'Allow'
+              Action:
+                - 's3:PutObject'
+                - 'ssm:PutParameter'
+              Resource:
+                - !Sub 'arn:aws:s3:::${S3Bucket}/raw/*'
+                - !Sub 'arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter${LastProcessedMonth}'
+                - !Sub 'arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter${LastProcessedYear}'
+
+  LastProcessedMonth:
+    Type: 'AWS::SSM::Parameter'
+    Properties:
+      Name: '/nyc-tlc-dataflow/LastProcessedMonth'
+      Type: 'String'
+      Value: '1'
+
+  LastProcessedYear:
+    Type: 'AWS::SSM::Parameter'
+    Properties:
+      Name: '/nyc-tlc-dataflow/LastProcessedYear'
+      Type: 'String'
+      Value: '2024'
