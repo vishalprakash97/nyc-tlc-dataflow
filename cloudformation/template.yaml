@@ -29,6 +29,7 @@ Resources:
   FetchDataFunction:
     Type: AWS::Serverless::Function
     Properties:
+      FunctionName: !Sub "${AWS::StackName}-fetch_data"
       CodeUri: ../lambda/fetch_data
       Handler: function.lambda_handler
       Timeout: 30
@@ -40,7 +41,6 @@ Resources:
           url: !Ref URL
           ssm_month_var: !Ref LastProcessedMonth
           ssm_year_var: !Ref LastProcessedYear
-
       Policies:
         - Statement:
             - Effect: 'Allow'
@@ -51,6 +51,27 @@ Resources:
                 - !Sub 'arn:aws:s3:::${S3Bucket}/raw/*'
                 - !Sub 'arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter${LastProcessedMonth}'
                 - !Sub 'arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter${LastProcessedYear}'
+
+  CleanDataFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub "${AWS::StackName}-clean_data"
+      CodeUri: ../lambda/clean_data
+      Handler: function.lambda_handler
+      Timeout: 60
+      MemorySize: 1024
+      Environment:
+        Variables:
+          bucket_name: !Ref S3Bucket
+      Policies:
+        - Statement:
+            - Effect: 'Allow'
+              Action:
+                - 's3:GetObject'
+                - 's3:PutObject'
+              Resource:
+                - !Sub 'arn:aws:s3:::${S3Bucket}/raw/*'
+                - !Sub 'arn:aws:s3:::${S3Bucket}/cleaned/*'
 
   LastProcessedMonth:
     Type: 'AWS::SSM::Parameter'
