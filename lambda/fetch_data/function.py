@@ -1,5 +1,4 @@
 import boto3
-import json
 from bs4 import BeautifulSoup
 import os
 import requests
@@ -54,7 +53,9 @@ def lambda_handler(event, context):
     object_key=upload_to_s3(url, year, month, color)
     update_ssm_parameters(month,year)
     return {
-        'statusCode': 200,
-        'body': json.dumps(f"Success. File Uploaded to:{bucket_name}/{object_key}")
+        'status': 200,
+        'message': "Success. File Uploaded to S3",
+        'bucket_name': bucket_name,
+        'object_key': object_key
     }   
         
