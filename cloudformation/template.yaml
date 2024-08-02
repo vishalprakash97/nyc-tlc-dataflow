@@ -58,8 +58,8 @@ Resources:
       FunctionName: !Sub "${AWS::StackName}-clean_data"
       CodeUri: ../lambda/clean_data
       Handler: function.lambda_handler
-      Timeout: 60
-      MemorySize: 1024
+      Timeout: 90
+      MemorySize: 512
       Environment:
         Variables:
           bucket_name: !Ref S3Bucket
@@ -67,9 +67,11 @@ Resources:
         - Statement:
             - Effect: 'Allow'
               Action:
+                - 's3:ListBucket'
                 - 's3:GetObject'
                 - 's3:PutObject'
               Resource:
+                - !Sub 'arn:aws:s3:::${S3Bucket}'
                 - !Sub 'arn:aws:s3:::${S3Bucket}/raw/*'
                 - !Sub 'arn:aws:s3:::${S3Bucket}/cleaned/*'
 
