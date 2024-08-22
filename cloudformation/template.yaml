@@ -9,12 +9,25 @@ Parameters:
   URL:
     Type: String
     Default: https://www.nyc.gov/site/tlc/about/tlc-trip-record-data.page
+  
+  RedshiftDBName:
+    Type: String
+    Default: nyc_tlc_db
+  RedshiftWorkgroupName:
+    Type: String
+    Default: nyc-tlc-workgroup
+  RedshiftNamespaceName:
+    Type: String
+    Default: nyc-tlc-namespace
+  RedshiftTableName:
+    Type: String
+    Default: yellow_tripdata
 
 Globals:
   Function:
     Runtime: python3.11
     Architectures:
-      - x86_64
+      - arm64
     LoggingConfig:
       LogFormat: JSON
 
@@ -25,6 +38,16 @@ Resources:
       BucketName: nyc-tlc-data-lake
       VersioningConfiguration:
         Status: Enabled
+
+  RedshiftStack:
+    Type: AWS::CloudFormation::Stack
+    Properties: 
+      TemplateURL: "./redshift.yaml"
+      Parameters: 
+        S3BucketName: !Ref S3Bucket
+        RedshiftDBName: !Ref RedshiftDBName
+        RedshiftWorkgroupName: !Ref RedshiftWorkgroupName
+        RedshiftNamespaceName: !Ref RedshiftNamespaceName
 
   FetchDataFunction:
     Type: AWS::Serverless::Function
@@ -43,14 +66,14 @@ Resources:
           ssm_year_var: !Ref LastProcessedYear
       Policies:
         - Statement:
-            - Effect: 'Allow'
-              Action:
-                - 's3:PutObject'
-                - 'ssm:PutParameter'
-              Resource:
-                - !Sub 'arn:aws:s3:::${S3Bucket}/raw/*'
-                - !Sub 'arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter${LastProcessedMonth}'
-                - !Sub 'arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter${LastProcessedYear}'
+          - Effect: 'Allow'
+            Action:
+              - s3:PutObject
+              - ssm:PutParameter
+            Resource:
+              - !Sub 'arn:aws:s3:::${S3Bucket}/raw/*'
+              - !Sub 'arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter${LastProcessedMonth}'
+              - !Sub 'arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter${LastProcessedYear}'
 
   CleanDataFunction:
     Type: AWS::Serverless::Function
@@ -65,15 +88,60 @@ Resources:
           bucket_name: !Ref S3Bucket
       Policies:
         - Statement:
-            - Effect: 'Allow'
-              Action:
-                - 's3:ListBucket'
-                - 's3:GetObject'
-                - 's3:PutObject'
-              Resource:
-                - !Sub 'arn:aws:s3:::${S3Bucket}'
-                - !Sub 'arn:aws:s3:::${S3Bucket}/raw/*'
-                - !Sub 'arn:aws:s3:::${S3Bucket}/cleaned/*'
+          - Effect: 'Allow'
+            Action:
+              - s3:ListBucket
+              - s3:GetObject
+              - s3:PutObject
+            Resource:
+              - !Sub 'arn:aws:s3:::${S3Bucket}'
+              - !Sub 'arn:aws:s3:::${S3Bucket}/raw/*'
+              - !Sub 'arn:aws:s3:::${S3Bucket}/cleaned/*'
+
+  UploadDataFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub "${AWS::StackName}-upload_data"
+      CodeUri: ../lambda/upload_data
+      Handler: function.lambda_handler
+      Timeout: 30
+      MemorySize: 512
+      Environment:
+        Variables:
+          redshift_db: !Ref RedshiftDBName
+          workgroup_name: !Ref RedshiftWorkgroupName
+          iam_role_arn: !GetAtt RedshiftStack.Outputs.RedshiftIAMRoleArn
+          secret_arn: !GetAtt RedshiftStack.Outputs.DBSecretArn
+          table_name: !Ref RedshiftTableName
+      Policies:
+        - Statement:
+          - Effect: 'Allow'
+            Action:
+              - s3:ListBucket
+              - s3:GetObject
+            Resource:
+              - !Sub 'arn:aws:s3:::${S3Bucket}'
+              - !Sub 'arn:aws:s3:::${S3Bucket}/cleaned/*'
+          - Effect: 'Allow'
+            Action:
+              - iam:PassRole
+              - secretsmanager:GetSecretValue
+            Resource:
+              - !GetAtt RedshiftStack.Outputs.RedshiftIAMRoleArn
+              - !GetAtt RedshiftStack.Outputs.DBSecretArn
+        - Statement:
+          - Effect: 'Allow'
+            Action:
+              - redshift-data:ExecuteStatement
+              - redshift-serverless:GetCredentials
+            Resource:
+              - !GetAtt RedshiftStack.Outputs.WorkgroupArn
+              - !GetAtt RedshiftStack.Outputs.NamespaceArn
+          - Effect: 'Allow'
+            Action:
+              - redshift-data:DescribeStatement
+            Resource: '*'
+
 
   LastProcessedMonth:
     Type: 'AWS::SSM::Parameter'
@@ -88,3 +156,4 @@ Resources:
       Name: '/nyc-tlc-dataflow/LastProcessedYear'
       Type: 'String'
       Value: '2024'
+
