@@ -1,0 +1,84 @@
+AWSTemplateFormatVersion: '2010-09-09'
+
+Parameters:
+  S3BucketName:
+    Type: String
+  RedshiftDBName:
+    Type: String
+  RedshiftWorkgroupName:
+    Type: String
+  RedshiftNamespaceName:
+    Type: String
+
+Resources:
+  RedshiftServerlessNamespace:
+    Type: AWS::RedshiftServerless::Namespace
+    Properties:
+      NamespaceName: !Ref RedshiftNamespaceName
+      AdminUsername: !Sub '{{resolve:secretsmanager:${RedshiftDBSecret}::username}}'
+      AdminUserPassword: !Sub '{{resolve:secretsmanager:${RedshiftDBSecret}::password}}'
+      DbName: !Ref RedshiftDBName
+      IamRoles:
+          - !GetAtt RedshiftIAMRole.Arn
+
+
+  RedshiftServerlessWorkgroup:
+    Type: AWS::RedshiftServerless::Workgroup
+    Properties:
+      WorkgroupName: !Ref RedshiftWorkgroupName
+      NamespaceName: !Ref RedshiftServerlessNamespace
+      BaseCapacity: 8
+
+  RedshiftIAMRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: 
+                - redshift.amazonaws.com
+                - lambda.amazonaws.com
+            Action: sts:AssumeRole
+          
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonRedshiftAllCommandsFullAccess
+      Policies:
+        - PolicyName: RedshiftS3AccessPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Action:
+                - s3:GetObject
+                - s3:ListBucket
+                - s3:PutObject
+                - s3:DeleteObject
+                Effect: Allow
+                Resource:
+                - !Sub 'arn:aws:s3:::${S3BucketName}/*'
+                - !Sub 'arn:aws:s3:::${S3BucketName}'
+
+  RedshiftDBSecret:
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Name: redshift-db-secret
+      GenerateSecretString:
+        SecretStringTemplate: '{"username": "admin"}'
+        GenerateStringKey: "password"
+        PasswordLength: 16
+        ExcludeCharacters: '"@/\\'
+      Tags:
+        - Key: Redshift
+          Value: For UI Access
+
+Outputs:
+  RedshiftIAMRoleArn:
+    Value: !GetAtt RedshiftIAMRole.Arn
+  DBSecretArn:
+    Value: !Ref RedshiftDBSecret
+  NamespaceArn:
+    Value: !GetAtt RedshiftServerlessNamespace.Namespace.NamespaceArn
+  WorkgroupArn:
+    Value: !GetAtt RedshiftServerlessWorkgroup.Workgroup.WorkgroupArn
+
