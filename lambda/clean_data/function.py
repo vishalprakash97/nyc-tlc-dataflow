@@ -7,18 +7,49 @@ import os
 s3=boto3.client("s3")
 bucket_name=os.environ['bucket_name']
 
+taxi_dtypes = {
+    'VendorID': 'int64',
+    'passenger_count': 'int64',
+    'trip_distance': float,
+    'RatecodeID': 'int64',
+    'store_and_fwd_flag':str,
+    'PULocationID': 'int64',
+    'DOLocationID': 'int64',
+    'payment_type': 'int64',
+    'fare_amount': float,
+    'extra':float,
+    'mta_tax':float,
+    'tip_amount':float,
+    'tolls_amount':float,
+    'improvement_surcharge':float,
+    'total_amount':float,
+    'congestion_surcharge':float
+
+}
+
 def read_file(bucket_name,object_key):
     parquet_file=pq.ParquetFile(f"s3://{bucket_name}/{object_key}")
     return parquet_file
 
 def transform_data(df):
-    # remove null values and rows with zero passengers
-    #print(f"Before Cleaning | Shape: {df.shape}")      
+    
+    # remove null values and rows with zero passengers  
     df_cleaned=df.dropna()
-    df_cleaned=df_cleaned.loc[df['passenger_count']!= 0]
-    df_cleaned['tpep_pickup_date'] = df_cleaned['tpep_pickup_datetime'].dt.date
-    #print(f"After Cleaning | Shape: {df_cleaned.shape}")      
+    df_cleaned=df_cleaned.loc[df_cleaned['passenger_count']!= 0]
+    df_cleaned=df_cleaned.astype(taxi_dtypes)
+
+    #column names to lowercase
+    df_cleaned.columns=df_cleaned.columns.str.lower()
+    
+    #fix datatypes
+    df_cleaned['tpep_pickup_datetime'] = pd.to_datetime(df_cleaned['tpep_pickup_datetime'])
+    df_cleaned['tpep_dropoff_datetime'] = pd.to_datetime(df_cleaned['tpep_dropoff_datetime'])
+    df_cleaned['tpep_pickup_date'] = df_cleaned['tpep_pickup_datetime'].dt.date  
+    mapping = {'N': 0, 'Y': 1}
+    df_cleaned['store_and_fwd_flag'] = df_cleaned['store_and_fwd_flag'].map(mapping).astype('int64')
+
     return df_cleaned
+
 
 def write_to_s3(df, bucket_name, base_object_key):
     # Convert the dataframe to a pyarrow table
@@ -28,6 +59,7 @@ def write_to_s3(df, bucket_name, base_object_key):
     # Use write_to_dataset to write the partitioned data to S3
     pq.write_to_dataset(table, root_path=s3_path, partition_cols=['tpep_pickup_date'])
     return None
+
 
 def lambda_handler(event, context):
     object_key=event['object_key']
