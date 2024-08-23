@@ -104,8 +104,8 @@ Resources:
       FunctionName: !Sub "${AWS::StackName}-upload_data"
       CodeUri: ../lambda/upload_data
       Handler: function.lambda_handler
-      Timeout: 30
-      MemorySize: 512
+      Timeout: 60
+      MemorySize: 256
       Environment:
         Variables:
           redshift_db: !Ref RedshiftDBName
