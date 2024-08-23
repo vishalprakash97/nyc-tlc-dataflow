@@ -83,5 +83,5 @@ def lambda_handler(event, context):
         'status': 200,
         'message': "Success. Files Uploaded to S3",
         'bucket_name': bucket_name,
-        'path': output_object_key
+        'object_path': output_object_key
     }
