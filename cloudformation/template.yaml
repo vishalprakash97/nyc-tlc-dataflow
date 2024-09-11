@@ -37,12 +37,12 @@ Resources:
     Properties:
       BucketName: nyc-tlc-data-lake
       VersioningConfiguration:
-        Status: Enabled
+        Status: Suspended
 
   RedshiftStack:
-    Type: AWS::CloudFormation::Stack
-    Properties: 
-      TemplateURL: "./redshift.yaml"
+    Type: AWS::Serverless::Application
+    Properties:
+      Location: ./redshift.yaml
       Parameters: 
         S3BucketName: !Ref S3Bucket
         RedshiftDBName: !Ref RedshiftDBName
@@ -62,8 +62,8 @@ Resources:
           bucket_name: !Ref S3Bucket
           color: !Ref Color
           url: !Ref URL
-          ssm_month_var: !Ref LastProcessedMonth
-          ssm_year_var: !Ref LastProcessedYear
+          ssm_month_var: !Ref NextMonth
+          ssm_year_var: !Ref NextYear
       Policies:
         - Statement:
           - Effect: 'Allow'
@@ -72,8 +72,8 @@ Resources:
               - ssm:PutParameter
             Resource:
               - !Sub 'arn:aws:s3:::${S3Bucket}/raw/*'
-              - !Sub 'arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter${LastProcessedMonth}'
-              - !Sub 'arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter${LastProcessedYear}'
+              - !Sub 'arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter${NextMonth}'
+              - !Sub 'arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter${NextYear}'
 
   CleanDataFunction:
     Type: AWS::Serverless::Function
@@ -91,12 +91,16 @@ Resources:
           - Effect: 'Allow'
             Action:
               - s3:ListBucket
-              - s3:GetObject
+              - s3:ListBucketVersions
+            Resource: !Sub 'arn:aws:s3:::${S3Bucket}'
+          - Effect: 'Allow'
+            Action: s3:GetObject
+            Resource: !Sub 'arn:aws:s3:::${S3Bucket}/raw/*'
+          - Effect: 'Allow'
+            Action:
+              - s3:DeleteObject
               - s3:PutObject
-            Resource:
-              - !Sub 'arn:aws:s3:::${S3Bucket}'
-              - !Sub 'arn:aws:s3:::${S3Bucket}/raw/*'
-              - !Sub 'arn:aws:s3:::${S3Bucket}/cleaned/*'
+            Resource: !Sub 'arn:aws:s3:::${S3Bucket}/cleaned/*'
 
   UploadDataFunction:
     Type: AWS::Serverless::Function
@@ -104,7 +108,7 @@ Resources:
       FunctionName: !Sub "${AWS::StackName}-upload_data"
       CodeUri: ../lambda/upload_data
       Handler: function.lambda_handler
-      Timeout: 60
+      Timeout: 90
       MemorySize: 256
       Environment:
         Variables:
@@ -141,19 +145,28 @@ Resources:
             Action:
               - redshift-data:DescribeStatement
             Resource: '*'
-
-
-  LastProcessedMonth:
+  
+  StepFunctionsStack:
+    Type: AWS::Serverless::Application
+    Properties: 
+      Location: ./stepfunctions.yaml
+      Parameters: 
+        FetchDataFunctionArn: !GetAtt FetchDataFunction.Arn
+        CleanDataFunctionArn: !GetAtt CleanDataFunction.Arn
+        UploadDataFunctionArn: !GetAtt UploadDataFunction.Arn
+        NextMonthPath: !Ref NextMonth
+        NextYearPath: !Ref NextYear
+        
+  NextMonth:
     Type: 'AWS::SSM::Parameter'
     Properties:
-      Name: '/nyc-tlc-dataflow/LastProcessedMonth'
+      Name: '/nyc-tlc-dataflow/NextMonth'
       Type: 'String'
       Value: '1'
 
-  LastProcessedYear:
+  NextYear:
     Type: 'AWS::SSM::Parameter'
     Properties:
-      Name: '/nyc-tlc-dataflow/LastProcessedYear'
+      Name: '/nyc-tlc-dataflow/NextYear'
       Type: 'String'
       Value: '2024'
-

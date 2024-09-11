@@ -1,0 +1,116 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+
+Parameters:
+  FetchDataFunctionArn: 
+    Type: String
+  CleanDataFunctionArn: 
+    Type: String
+  UploadDataFunctionArn:
+    Type: String
+  NextMonthPath:
+   Type: String
+  NextYearPath:
+    Type: String
+
+Resources:
+  CoreETLPipeline:
+    Type: AWS::Serverless::StateMachine
+    Name: CoreETLPipeline
+    Properties:
+      DefinitionUri: ../stepfunctions/core_etl.json
+      DefinitionSubstitutions:
+        FetchDataFunctionArn: !Ref FetchDataFunctionArn
+        CleanDataFunctionArn: !Ref CleanDataFunctionArn
+        UploadDataFunctionArn: !Ref UploadDataFunctionArn
+      Policies:
+        - Statement:
+            Effect: 'Allow'
+            Action: lambda:InvokeFunction
+            Resource:
+              - !Ref FetchDataFunctionArn
+              - !Ref CleanDataFunctionArn
+              - !Ref UploadDataFunctionArn
+  
+  BackfillPipeline:
+    Type: AWS::Serverless::StateMachine
+    Name: BackfillPipeline
+    Properties:
+      DefinitionUri: ../stepfunctions/backfill_flow.json
+      DefinitionSubstitutions:
+        CoreETLArn: !Ref CoreETLPipeline
+      Role: !GetAtt BackfillFlowIAMRole.Arn
+    
+  MonthlyPipeline:
+    Type: AWS::Serverless::StateMachine
+    Name: MonthlyPipeline
+    Properties:
+      DefinitionUri: ../stepfunctions/monthly_flow.json
+      DefinitionSubstitutions:
+        CoreETLArn: !Ref CoreETLPipeline
+        MonthPath: !Ref NextMonthPath
+        YearPath: !Ref NextYearPath
+      Role: !GetAtt MonthlyFlowIAMRole.Arn
+      Events:
+        MonthlyIngestionEvent:
+          Type: Schedule
+          Properties:
+            Name: MonthlyTrigger
+            Schedule: cron(0 0 10 * ? *)
+
+  ExecuteStepFunctionPolicy:            
+    Type: 'AWS::IAM::Policy'
+    Properties:
+      PolicyName: ExecuteStepFunctionPolicy
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: 'Allow'
+            Action: states:StartExecution
+            Resource: !Ref CoreETLPipeline
+
+          - Effect: 'Allow'
+            Action:
+              - states:DescribeExecution
+              - states:StopExecution
+            Resource: "*"
+            
+          - Effect: 'Allow'
+            Action:
+              - events:PutTargets
+              - events:PutRule
+              - events:DescribeRule
+            Resource: !Sub 'arn:aws:events:${AWS::Region}:${AWS::AccountId}:rule/StepFunctionsGetEventsForStepFunctionsExecutionRule'
+      Roles:
+        - !Ref BackfillFlowIAMRole
+        - !Ref MonthlyFlowIAMRole
+
+  BackfillFlowIAMRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: states.amazonaws.com
+            Action: sts:AssumeRole  
+
+  MonthlyFlowIAMRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: states.amazonaws.com
+            Action: sts:AssumeRole  
+      Policies:
+        - PolicyName: SSMParameterAccessPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              Effect: 'Allow'
+              Action: 'ssm:GetParameter'
+              Resource:
+                - !Sub 'arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter${NextMonthPath}'
+                - !Sub 'arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter${NextYearPath}'
