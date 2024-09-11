@@ -2,6 +2,7 @@
 
 ### Description
 * Read parquet file from S3 Bucket
+* Delete existing files(if any) to preserve idempotence
 * Data read in chunks for memory efficiency
 * Transform data
   * Drop null values

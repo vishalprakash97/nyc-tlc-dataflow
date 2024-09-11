@@ -9,6 +9,7 @@
   - _upload_data_
 - SSM parameters
 - Redshift Nested Stack 
+- StepFunctions Nested Stack
 
 ### redshift.yaml
 
@@ -16,3 +17,12 @@
 - Serverless Workgroup
 - Secrets Manger Secret for Redshift
 - IAM Role for Namespace
+
+
+## stepfunctions.yaml
+
+- Core ETL pipeline
+- Backfill pipeline
+- Monthly pipeline
+  - EventBridge Schedule
+- IAM Roles and policies for state machines

@@ -48,7 +48,6 @@ def delete_files_with_prefix(bucket_name, path):
         )
         
     print(f"Deleted all objects at {path}")
-    print(len(delete_keys))
     return None
 
 def transform_data(df):
