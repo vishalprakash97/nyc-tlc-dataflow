@@ -31,6 +31,26 @@ def read_file(bucket_name,object_key):
     parquet_file=pq.ParquetFile(f"s3://{bucket_name}/{object_key}")
     return parquet_file
 
+def delete_files_with_prefix(bucket_name, path):
+    # List objects with the specified prefix
+    objects_to_delete = s3.list_objects_v2(Bucket=bucket_name, Prefix=path)
+    
+    if 'Contents' not in objects_to_delete:
+        print(f"No objects found at {path}")
+        return
+    
+    # Create a list of objects and delete
+    delete_keys = [{'Key': obj['Key']} for obj in objects_to_delete['Contents']]
+    response = s3.delete_objects(Bucket=bucket_name,
+        Delete={
+                'Objects': delete_keys
+            }
+        )
+        
+    print(f"Deleted all objects at {path}")
+    print(len(delete_keys))
+    return None
+
 def transform_data(df):
     
     # remove null values and rows with zero passengers  
@@ -67,6 +87,9 @@ def lambda_handler(event, context):
     output_object_key= os.path.splitext(object_key)[0]
     output_object_key=output_object_key.replace('raw','cleaned')
 
+    #for idempotence, delete files if any
+    delete_files_with_prefix(bucket_name,output_object_key)
+    
     parquet_file=read_file(bucket_name,object_key)
     old,new=0,0
     for batch in parquet_file.iter_batches(batch_size=100000):
