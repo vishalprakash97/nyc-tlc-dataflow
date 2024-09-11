@@ -1,0 +1,30 @@
+  {
+    "Comment": "Executes the data processing flow for multiple months to backfill historical data",
+    "StartAt": "ProcessMonths",
+    "States": {
+      "ProcessMonths": {
+        "Type": "Map",
+        "ItemsPath": "$.months",
+        "Parameters": {
+          "year.$": "$.year",
+          "month.$": "$$.Map.Item.Value"
+        },
+        "Iterator": {
+          "StartAt": "Step Functions StartExecution",
+          "States": {
+            "Step Functions StartExecution": {
+              "Type": "Task",
+              "Resource": "arn:aws:states:::states:startExecution.sync:2",
+              "Parameters": {
+                "StateMachineArn": "${CoreETLArn}",
+                "Input.$": "$"
+              },
+              "End": true
+            }
+          }
+        },
+        "End": true,
+        "MaxConcurrency": 1
+      }
+    }
+  }
