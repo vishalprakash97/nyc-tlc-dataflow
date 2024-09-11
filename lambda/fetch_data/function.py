@@ -7,7 +7,6 @@ import re
 s3=boto3.client("s3")
 ssm=boto3.client("ssm")
 
-
 color=os.getenv('color')
 bucket_name=os.getenv('bucket_name')
 source_url=os.getenv('url')
@@ -41,14 +40,18 @@ def upload_to_s3(url, year, month,color):
     return object_key
     
 def update_ssm_parameters(month,year):
+    #get next month and year
+    year=year+(month)//12
+    month=(month%12) +1
+    
     ssm.put_parameter(Name=ssm_month_var, Value=str(month), Type='String', Overwrite=True)
     ssm.put_parameter(Name=ssm_year_var, Value=str(year), Type='String', Overwrite=True)
     print("SSM Parameters Updated")
     return None
 
 def lambda_handler(event, context):
-    month=event['month']
-    year=event['year']
+    month=int(event['month'])
+    year=int(event['year'])
     url=get_url(color,year, month)
     object_key=upload_to_s3(url, year, month, color)
     update_ssm_parameters(month,year)
