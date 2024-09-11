@@ -12,7 +12,7 @@ redshift_role_arn = os.environ['iam_role_arn']
 table_name = os.environ['table_name']
 secret_arn= os.environ['secret_arn']
 
-def wait_for_statement_to_finish(statement_id):
+def wait_for_statement_to_finish(statement_id,description):
     # Polling to check the status of the statement
     prev_status= None
     while True:
@@ -20,7 +20,7 @@ def wait_for_statement_to_finish(statement_id):
         status = response['Status']
         
         if status == 'FINISHED':
-            print("Statement Executed successfully.")
+            print(f"{description} Executed successfully.")
             break
         elif status in ['FAILED','ABORTED']:
             raise Exception(f"Statement failed: {response['Error']}")
@@ -30,13 +30,21 @@ def wait_for_statement_to_finish(statement_id):
             print(f"Statement status: {status}")
             prev_status= status
 
+def execute_sql(statement,secret_arn,workgroup_name,db_name):
+    response = client.execute_statement(
+            WorkgroupName=workgroup_name,
+            SecretArn=secret_arn,
+            Database=db_name,
+            Sql=statement
+            )
+    return response
+
 def lambda_handler(event, context):
 
     bucket_name = event['bucket_name']
     object_path = event['object_path']
 
     # SQL statements to run
-
     create_table_sql=f"""
         CREATE TABLE IF NOT EXISTS {table_name} (
             "vendorid" BIGINT,
@@ -60,6 +68,9 @@ def lambda_handler(event, context):
             "airport_fee" DOUBLE PRECISION,
             "tpep_pickup_date" TIMESTAMP
         )
+        DISTSTYLE KEY
+        DISTKEY (tpep_pickup_date)
+        SORTKEY (tpep_pickup_date, tpep_pickup_datetime);
     """
 
     copy_from_s3_sql = f"""
@@ -70,22 +81,20 @@ def lambda_handler(event, context):
     """
     # Execute SQL statements
     try:
-        response = client.execute_statement(
-            WorkgroupName=workgroup_name,
-            Database=db_name,
-            Sql=create_table_sql
-            )
-        wait_for_statement_to_finish(response['Id'])
+        response= execute_sql("BEGIN;",secret_arn,workgroup_name,db_name)
+        wait_for_statement_to_finish(response['Id'],"BEGIN")
+
+        response= execute_sql(create_table_sql,secret_arn,workgroup_name,db_name)
+        wait_for_statement_to_finish(response['Id'],"CREATE TABLE")
         
-        response = client.execute_statement(
-            Database=db_name,
-            SecretArn=secret_arn,
-            Sql=copy_from_s3_sql,
-            WorkgroupName=workgroup_name
-        )
-        wait_for_statement_to_finish(response['Id'])
+        response= execute_sql(copy_from_s3_sql,secret_arn,workgroup_name,db_name)
+        wait_for_statement_to_finish(response['Id'],"COPY")
+
+        response= execute_sql("COMMIT;",secret_arn,workgroup_name,db_name)
+        wait_for_statement_to_finish(response['Id'],"COMMIT")
 
     except Exception as e:
+        response= execute_sql("ROLLBACK;",secret_arn,workgroup_name,db_name)
         print(f"Error executing statements: {e}")
         raise e
 
@@ -93,4 +102,3 @@ def lambda_handler(event, context):
         'status': 200,
         'message': "Success. Data loaded into Redshift Serverless."
     }
-
