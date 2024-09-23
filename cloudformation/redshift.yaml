@@ -27,6 +27,9 @@ Resources:
     Properties:
       WorkgroupName: !Ref RedshiftWorkgroupName
       NamespaceName: !Ref RedshiftServerlessNamespace
+      PubliclyAccessible: True
+      SecurityGroupIds: 
+        - !GetAtt dbtSecurityGroup.GroupId
       BaseCapacity: 8
 
   RedshiftIAMRole:
@@ -70,6 +73,37 @@ Resources:
         - Key: Redshift
           Value: For UI Access
 
+  dbtSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupName: dbt
+      GroupDescription: Inbound Rules to allow dbt-core to access Redshift
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 5439
+          ToPort: 5439
+          CidrIp: 52.45.144.63/32
+        - IpProtocol: tcp
+          FromPort: 5439
+          ToPort: 5439
+          CidrIp: 3.214.191.130/32
+        - IpProtocol: tcp
+          FromPort: 5439
+          ToPort: 5439
+          CidrIp: 52.22.161.231/32
+        - IpProtocol: tcp
+          FromPort: 5439
+          ToPort: 5439
+          CidrIp: 52.3.77.232/32
+        - IpProtocol: tcp
+          FromPort: 5439
+          ToPort: 5439
+          CidrIp: 54.81.134.249/32
+        - IpProtocol: tcp
+          FromPort: 5439
+          ToPort: 5439
+          CidrIp: 34.233.79.135/32
+      
 Outputs:
   RedshiftIAMRoleArn:
     Value: !GetAtt RedshiftIAMRole.Arn
