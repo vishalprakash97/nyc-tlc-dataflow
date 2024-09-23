@@ -3,13 +3,9 @@ Transform: AWS::Serverless-2016-10-31
 Description: SAM Template to fetch data for TLC
 
 Parameters:
-  Color:
-    Type: String
-    Default: yellow
   URL:
     Type: String
     Default: https://www.nyc.gov/site/tlc/about/tlc-trip-record-data.page
-  
   RedshiftDBName:
     Type: String
     Default: nyc_tlc_db
@@ -19,9 +15,6 @@ Parameters:
   RedshiftNamespaceName:
     Type: String
     Default: nyc-tlc-namespace
-  RedshiftTableName:
-    Type: String
-    Default: yellow_tripdata
 
 Globals:
   Function:
@@ -60,7 +53,6 @@ Resources:
       Environment:
         Variables:
           bucket_name: !Ref S3Bucket
-          color: !Ref Color
           url: !Ref URL
           ssm_month_var: !Ref NextMonth
           ssm_year_var: !Ref NextYear
@@ -81,8 +73,8 @@ Resources:
       FunctionName: !Sub "${AWS::StackName}-clean_data"
       CodeUri: ../lambda/clean_data
       Handler: function.lambda_handler
-      Timeout: 90
-      MemorySize: 512
+      Timeout: 60
+      MemorySize: 1024
       Environment:
         Variables:
           bucket_name: !Ref S3Bucket
@@ -116,7 +108,6 @@ Resources:
           workgroup_name: !Ref RedshiftWorkgroupName
           iam_role_arn: !GetAtt RedshiftStack.Outputs.RedshiftIAMRoleArn
           secret_arn: !GetAtt RedshiftStack.Outputs.DBSecretArn
-          table_name: !Ref RedshiftTableName
       Policies:
         - Statement:
           - Effect: 'Allow'
