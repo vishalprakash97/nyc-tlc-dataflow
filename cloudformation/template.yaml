@@ -136,7 +136,28 @@ Resources:
             Action:
               - redshift-data:DescribeStatement
             Resource: '*'
-  
+
+  EmptyS3Function:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub "${AWS::StackName}-empty_s3"
+      CodeUri: ../lambda/empty_s3
+      Handler: function.lambda_handler
+      Timeout: 30
+      MemorySize: 128
+      Environment:
+        Variables:
+          bucket_name: !Ref S3Bucket
+      Policies:
+        - Statement:
+          - Effect: 'Allow'
+            Action:
+              - s3:ListBucket
+              - s3:DeleteObjectVersion
+            Resource: 
+              - !Sub 'arn:aws:s3:::${S3Bucket}'
+              - !Sub 'arn:aws:s3:::${S3Bucket}/*'
+
   StepFunctionsStack:
     Type: AWS::Serverless::Application
     Properties: 
@@ -161,3 +182,10 @@ Resources:
       Name: '/nyc-tlc-dataflow/NextYear'
       Type: 'String'
       Value: '2024'
+
+  EmptyS3CustomResource:
+    Type: 'AWS::CloudFormation::CustomResource'
+    #DependsOn: RedshiftStack
+    Properties:
+      ServiceToken: !GetAtt EmptyS3Function.Arn
+      ServiceTimeout: 30
