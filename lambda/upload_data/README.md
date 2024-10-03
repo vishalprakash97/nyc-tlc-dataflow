@@ -1,4 +1,4 @@
-## upload_data.py
+## upload_data
 
 ### Description
 * Create table if it does not exist
