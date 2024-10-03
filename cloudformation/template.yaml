@@ -137,17 +137,63 @@ Resources:
               - redshift-data:DescribeStatement
             Resource: '*'
 
-  EmptyS3Function:
+  ExecuteSetupFunction:
     Type: AWS::Serverless::Function
     Properties:
-      FunctionName: !Sub "${AWS::StackName}-empty_s3"
-      CodeUri: ../lambda/empty_s3
+      FunctionName: !Sub "${AWS::StackName}-execute_setup"
+      CodeUri: ../lambda/execute_setup
+      Handler: function.lambda_handler
+      Timeout: 90
+      MemorySize: 128
+      Environment:
+        Variables:
+          redshift_db: !Ref RedshiftDBName
+          workgroup_name: !Ref RedshiftWorkgroupName
+          iam_role_arn: !GetAtt RedshiftStack.Outputs.RedshiftIAMRoleArn
+          secret_arn: !GetAtt RedshiftStack.Outputs.DBSecretArn
+          bucket_name: !Ref S3Bucket
+          parameter_name: !Sub '/${AWS::StackName}/DevPassword'
+      Policies:
+        - Statement:
+          - Effect: 'Allow'
+            Action:
+              - s3:PutObject
+              - ssm:PutParameter
+            Resource:
+              - !Sub 'arn:aws:s3:::${S3Bucket}/*'
+              - !Sub 'arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/${AWS::StackName}/DevPassword'
+          - Effect: 'Allow'
+            Action:
+              - iam:PassRole
+              - secretsmanager:GetSecretValue
+            Resource:
+              - !GetAtt RedshiftStack.Outputs.RedshiftIAMRoleArn
+              - !GetAtt RedshiftStack.Outputs.DBSecretArn
+        - Statement:
+          - Effect: 'Allow'
+            Action:
+              - redshift-data:ExecuteStatement
+              - redshift-serverless:GetCredentials
+            Resource:
+              - !GetAtt RedshiftStack.Outputs.WorkgroupArn
+              - !GetAtt RedshiftStack.Outputs.NamespaceArn
+          - Effect: 'Allow'
+            Action:
+              - redshift-data:DescribeStatement
+            Resource: '*'
+
+  ExecuteCleanupFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub "${AWS::StackName}-execute_cleanup"
+      CodeUri: ../lambda/execute_cleanup
       Handler: function.lambda_handler
       Timeout: 30
       MemorySize: 128
       Environment:
         Variables:
           bucket_name: !Ref S3Bucket
+          parameter_name: !Sub '/${AWS::StackName}/DevPassword'
       Policies:
         - Statement:
           - Effect: 'Allow'
@@ -157,6 +203,9 @@ Resources:
             Resource: 
               - !Sub 'arn:aws:s3:::${S3Bucket}'
               - !Sub 'arn:aws:s3:::${S3Bucket}/*'
+          - Effect: 'Allow'
+            Action: ssm:DeleteParameter
+            Resource: !Sub 'arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/${AWS::StackName}/DevPassword'
 
   StepFunctionsStack:
     Type: AWS::Serverless::Application
@@ -172,20 +221,26 @@ Resources:
   NextMonth:
     Type: 'AWS::SSM::Parameter'
     Properties:
-      Name: '/nyc-tlc-dataflow/NextMonth'
+      Name: !Sub '/${AWS::StackName}/NextMonth'
       Type: 'String'
       Value: '1'
 
   NextYear:
     Type: 'AWS::SSM::Parameter'
     Properties:
-      Name: '/nyc-tlc-dataflow/NextYear'
+      Name: !Sub '/${AWS::StackName}/NextYear'
       Type: 'String'
       Value: '2024'
 
-  EmptyS3CustomResource:
+  ExecuteCleanupCustomResource:
     Type: 'AWS::CloudFormation::CustomResource'
-    #DependsOn: RedshiftStack
     Properties:
-      ServiceToken: !GetAtt EmptyS3Function.Arn
+      ServiceToken: !GetAtt ExecuteCleanupFunction.Arn
       ServiceTimeout: 30
+
+  ExecuteSetupCustomResource:
+    Type: 'AWS::CloudFormation::CustomResource'
+    DependsOn: RedshiftStack
+    Properties:
+      ServiceToken: !GetAtt ExecuteSetupFunction.Arn
+      ServiceTimeout: 90

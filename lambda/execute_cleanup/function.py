@@ -6,7 +6,14 @@ import json
 import requests
 
 s3 = boto3.client('s3')
+ssm=boto3.client("ssm")
 bucket_name=os.environ['bucket_name']
+parameter_name=os.environ['parameter_name']
+
+def delete_ssm_parameter(parameter_name):
+    ssm.delete_parameter(Name=parameter_name)
+    print(f"SSM Parameter {parameter_name} Deleted")
+    return None
 
 def delete_bucket_objects(bucket_name):
     
@@ -18,6 +25,7 @@ def delete_bucket_objects(bucket_name):
             objects = [{"Key": obj["Key"],'VersionId': "null"} for obj in page["Contents"]]
             s3.delete_objects(Bucket=bucket_name, Delete={"Objects": objects})
             print(f"Objects Deleted: {len(objects)}")
+    print(f"Emptied Bucket {bucket_name}")
     return None
 
 def send_cfn_response(event, context, status):
@@ -48,7 +56,7 @@ def lambda_handler(event, context):
     try:
         if event['RequestType'] == 'Delete':
             delete_bucket_objects(bucket_name)
-            print(f"Emptied Bucket {bucket_name}")
+            delete_ssm_parameter(parameter_name)
         else:
             print("No Action Taken")
         send_cfn_response(event, context, "SUCCESS")
