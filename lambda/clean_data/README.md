@@ -1,4 +1,4 @@
-## clean_data.py
+## clean_data
 
 ### Description
 * Read parquet file from S3 Bucket

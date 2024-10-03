@@ -3,13 +3,9 @@ Transform: AWS::Serverless-2016-10-31
 Description: SAM Template to fetch data for TLC
 
 Parameters:
-  Color:
-    Type: String
-    Default: yellow
   URL:
     Type: String
     Default: https://www.nyc.gov/site/tlc/about/tlc-trip-record-data.page
-  
   RedshiftDBName:
     Type: String
     Default: nyc_tlc_db
@@ -19,9 +15,6 @@ Parameters:
   RedshiftNamespaceName:
     Type: String
     Default: nyc-tlc-namespace
-  RedshiftTableName:
-    Type: String
-    Default: yellow_tripdata
 
 Globals:
   Function:
@@ -60,7 +53,6 @@ Resources:
       Environment:
         Variables:
           bucket_name: !Ref S3Bucket
-          color: !Ref Color
           url: !Ref URL
           ssm_month_var: !Ref NextMonth
           ssm_year_var: !Ref NextYear
@@ -81,8 +73,8 @@ Resources:
       FunctionName: !Sub "${AWS::StackName}-clean_data"
       CodeUri: ../lambda/clean_data
       Handler: function.lambda_handler
-      Timeout: 90
-      MemorySize: 512
+      Timeout: 60
+      MemorySize: 1024
       Environment:
         Variables:
           bucket_name: !Ref S3Bucket
@@ -116,7 +108,6 @@ Resources:
           workgroup_name: !Ref RedshiftWorkgroupName
           iam_role_arn: !GetAtt RedshiftStack.Outputs.RedshiftIAMRoleArn
           secret_arn: !GetAtt RedshiftStack.Outputs.DBSecretArn
-          table_name: !Ref RedshiftTableName
       Policies:
         - Statement:
           - Effect: 'Allow'
@@ -145,7 +136,77 @@ Resources:
             Action:
               - redshift-data:DescribeStatement
             Resource: '*'
-  
+
+  ExecuteSetupFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub "${AWS::StackName}-execute_setup"
+      CodeUri: ../lambda/execute_setup
+      Handler: function.lambda_handler
+      Timeout: 90
+      MemorySize: 128
+      Environment:
+        Variables:
+          redshift_db: !Ref RedshiftDBName
+          workgroup_name: !Ref RedshiftWorkgroupName
+          iam_role_arn: !GetAtt RedshiftStack.Outputs.RedshiftIAMRoleArn
+          secret_arn: !GetAtt RedshiftStack.Outputs.DBSecretArn
+          bucket_name: !Ref S3Bucket
+          parameter_name: !Sub '/${AWS::StackName}/DevPassword'
+      Policies:
+        - Statement:
+          - Effect: 'Allow'
+            Action:
+              - s3:PutObject
+              - ssm:PutParameter
+            Resource:
+              - !Sub 'arn:aws:s3:::${S3Bucket}/*'
+              - !Sub 'arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/${AWS::StackName}/DevPassword'
+          - Effect: 'Allow'
+            Action:
+              - iam:PassRole
+              - secretsmanager:GetSecretValue
+            Resource:
+              - !GetAtt RedshiftStack.Outputs.RedshiftIAMRoleArn
+              - !GetAtt RedshiftStack.Outputs.DBSecretArn
+        - Statement:
+          - Effect: 'Allow'
+            Action:
+              - redshift-data:ExecuteStatement
+              - redshift-serverless:GetCredentials
+            Resource:
+              - !GetAtt RedshiftStack.Outputs.WorkgroupArn
+              - !GetAtt RedshiftStack.Outputs.NamespaceArn
+          - Effect: 'Allow'
+            Action:
+              - redshift-data:DescribeStatement
+            Resource: '*'
+
+  ExecuteCleanupFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub "${AWS::StackName}-execute_cleanup"
+      CodeUri: ../lambda/execute_cleanup
+      Handler: function.lambda_handler
+      Timeout: 30
+      MemorySize: 128
+      Environment:
+        Variables:
+          bucket_name: !Ref S3Bucket
+          parameter_name: !Sub '/${AWS::StackName}/DevPassword'
+      Policies:
+        - Statement:
+          - Effect: 'Allow'
+            Action:
+              - s3:ListBucket
+              - s3:DeleteObjectVersion
+            Resource: 
+              - !Sub 'arn:aws:s3:::${S3Bucket}'
+              - !Sub 'arn:aws:s3:::${S3Bucket}/*'
+          - Effect: 'Allow'
+            Action: ssm:DeleteParameter
+            Resource: !Sub 'arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/${AWS::StackName}/DevPassword'
+
   StepFunctionsStack:
     Type: AWS::Serverless::Application
     Properties: 
@@ -160,13 +221,26 @@ Resources:
   NextMonth:
     Type: 'AWS::SSM::Parameter'
     Properties:
-      Name: '/nyc-tlc-dataflow/NextMonth'
+      Name: !Sub '/${AWS::StackName}/NextMonth'
       Type: 'String'
       Value: '1'
 
   NextYear:
     Type: 'AWS::SSM::Parameter'
     Properties:
-      Name: '/nyc-tlc-dataflow/NextYear'
+      Name: !Sub '/${AWS::StackName}/NextYear'
       Type: 'String'
       Value: '2024'
+
+  ExecuteCleanupCustomResource:
+    Type: 'AWS::CloudFormation::CustomResource'
+    Properties:
+      ServiceToken: !GetAtt ExecuteCleanupFunction.Arn
+      ServiceTimeout: 30
+
+  ExecuteSetupCustomResource:
+    Type: 'AWS::CloudFormation::CustomResource'
+    DependsOn: RedshiftStack
+    Properties:
+      ServiceToken: !GetAtt ExecuteSetupFunction.Arn
+      ServiceTimeout: 90

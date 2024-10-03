@@ -7,7 +7,7 @@ import re
 s3=boto3.client("s3")
 ssm=boto3.client("ssm")
 
-color=os.getenv('color')
+
 bucket_name=os.getenv('bucket_name')
 source_url=os.getenv('url')
 
@@ -52,6 +52,7 @@ def update_ssm_parameters(month,year):
 def lambda_handler(event, context):
     month=int(event['month'])
     year=int(event['year'])
+    color=event['color']
     url=get_url(color,year, month)
     object_key=upload_to_s3(url, year, month, color)
     update_ssm_parameters(month,year)
@@ -59,6 +60,8 @@ def lambda_handler(event, context):
         'status': 200,
         'message': "Success. File Uploaded to S3",
         'bucket_name': bucket_name,
-        'object_key': object_key
+        'month': month,
+        'year': year,
+        'color': color
     }   
         

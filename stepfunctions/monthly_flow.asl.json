@@ -2,50 +2,73 @@
     "Comment": "Orchestrating the data pipeline with output passing",
     "StartAt": "Parallel",
     "States": {
-      "Parallel": {
-        "Type": "Parallel",
-        "Branches": [
-          {
-            "StartAt": "GetMonth",
-            "States": {
-              "GetMonth": {
-                "Type": "Task",
-                "Parameters": {
-                  "Name": "${MonthPath}"
+        "Parallel": {
+            "Type": "Parallel",
+            "Branches": [
+                {
+                    "StartAt": "GetMonth",
+                    "States": {
+                        "GetMonth": {
+                            "Type": "Task",
+                            "Parameters": {
+                                "Name": "${MonthPath}"
+                            },
+                            "Resource": "arn:aws:states:::aws-sdk:ssm:getParameter",
+                            "End": true
+                        }
+                    }
                 },
-                "Resource": "arn:aws:states:::aws-sdk:ssm:getParameter",
-                "End": true
-              }
-            }
-          },
-          {
-            "StartAt": "GetYear",
-            "States": {
-              "GetYear": {
-                "Type": "Task",
-                "Parameters": {
-                  "Name": "${YearPath}"
+                {
+                    "StartAt": "GetYear",
+                    "States": {
+                        "GetYear": {
+                            "Type": "Task",
+                            "Parameters": {
+                                "Name": "${YearPath}"
+                            },
+                            "Resource": "arn:aws:states:::aws-sdk:ssm:getParameter",
+                            "End": true
+                        }
+                    }
+                }
+            ],
+            "ResultSelector": {
+                "month.$": "$.[0].Parameter.Value",
+                "year.$": "$.[1].Parameter.Value",
+                "colors": [
+                    "yellow",
+                    "green"
+                ]
+            },
+            "Next": "ColorMap"
+        },
+        "ColorMap": {
+            "Type": "Map",
+            "ItemProcessor": {
+                "ProcessorConfig": {
+                    "Mode": "INLINE"
                 },
-                "Resource": "arn:aws:states:::aws-sdk:ssm:getParameter",
-                "End": true
-              }
-            }
-          }
-        ],
-        "ResultSelector": {
-          "month.$": "$.[0].Parameter.Value",
-          "year.$": "$.[1].Parameter.Value"
-        },
-        "Next": "Start ETL Pipeline"
-      },
-      "Start ETL Pipeline": {
-        "Type": "Task",
-        "Resource": "arn:aws:states:::states:startExecution.sync:2",
-        "Parameters": {
-          "StateMachineArn": "${CoreETLArn}",
-          "Input.$": "$"
-        },
-        "End": true
-      }
+                "StartAt": "Start ETL Pipeline",
+                "States": {
+                    "Start ETL Pipeline": {
+                        "Type": "Task",
+                        "Resource": "arn:aws:states:::states:startExecution.sync:2",
+                        "Parameters": {
+                            "StateMachineArn": "${CoreETLArn}",
+                            "Input.$": "$"
+                        },
+                        "End": true
+                    }
+                }
+            },
+            "End": true,
+            "ItemsPath": "$.colors",
+            "ItemSelector": {
+                "year.$": "$.year",
+                "color.$": "$$.Map.Item.Value",
+                "month.$": "$.month"
+            },
+            "MaxConcurrency": 1
+        }
     }
-  }
+}
