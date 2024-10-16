@@ -1,30 +1,50 @@
-  {
+{
     "Comment": "Executes the data processing flow for multiple months to backfill historical data",
     "StartAt": "ProcessMonths",
     "States": {
-      "ProcessMonths": {
-        "Type": "Map",
-        "ItemsPath": "$.months",
-        "Parameters": {
-          "year.$": "$.year",
-          "month.$": "$$.Map.Item.Value"
-        },
-        "Iterator": {
-          "StartAt": "Step Functions StartExecution",
-          "States": {
-            "Step Functions StartExecution": {
-              "Type": "Task",
-              "Resource": "arn:aws:states:::states:startExecution.sync:2",
-              "Parameters": {
-                "StateMachineArn": "${CoreETLArn}",
-                "Input.$": "$"
-              },
-              "End": true
-            }
-          }
-        },
-        "End": true,
-        "MaxConcurrency": 1
-      }
+        "ProcessMonths": {
+            "Type": "Map",
+            "ItemsPath": "$.months",
+            "Parameters": {
+                "year.$": "$.year",
+                "month.$": "$$.Map.Item.Value",
+                "colors": [
+                    "yellow",
+                    "green"
+                ]
+            },
+            "Iterator": {
+                "StartAt": "ColorMap",
+                "States": {
+                    "ColorMap": {
+                        "Type": "Map",
+                        "ItemsPath": "$.colors",
+                        "Parameters": {
+                            "year.$": "$.year",
+                            "color.$": "$$.Map.Item.Value",
+                            "month.$": "$.month"
+                        },
+                        "Iterator": {
+                            "StartAt": "RunETL",
+                            "States": {
+                                "RunETL": {
+                                    "Type": "Task",
+                                    "Resource": "arn:aws:states:::states:startExecution.sync:2",
+                                    "Parameters": {
+                                        "StateMachineArn": "${CoreETLArn}",
+                                        "Input.$": "$"
+                                    },
+                                    "End": true
+                                }
+                            }
+                        },
+                        "MaxConcurrency": 1,
+                        "End": true
+                    }
+                }
+            },
+            "End": true,
+            "MaxConcurrency": 1
+        }
     }
-  }
+}
